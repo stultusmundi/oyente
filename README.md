@@ -1,7 +1,7 @@
 Oyente
 ======
 
-An Analysis Tool for Smart Contracts
+An Analysis Tool for Smart Contracts, Support 0.8.0 Solidity and above NOW.
 
 [![Gitter][gitter-badge]][gitter-url]
 [![License: GPL v3][license-badge]][license-badge-url]
