@@ -12,7 +12,9 @@ An Analysis Tool for Smart Contracts, **Support 0.8.0 Solidity and above NOW**.
 Oyente is an smart contract vulnerability detection tool based on symbolic execution. Currently, the version of Oyente released by the author theoretically supports smart contracts written in Solidity up to version 0.4.19 and disassemblers up to EVM version 1.7.3. However, in practical testing, it can detect vulnerabilities in smart contract written in Solidity up to version 0.5.16.
 
 
-The current version of Oyente is unable to detect smart contracts written in Solidity versions higher than 0.5.16. This limitation arises because the newer versions of the Solidity language solc compiler have some differences in API calls and design compared to the older versions. Additionally, higher versions of Solidity correspond to EVM virtual machines that incorporate more opcodes. Therefore, we have extended the version compatibility of the original Oyente to support all Solidity versions up to the latest available version as of June 2023, which was 0.8.19.
+The current version of Oyente is unable to detect smart contracts written in Solidity versions higher than 0.5.16. This limitation arises because the newer versions of the Solidity language solc compiler have some differences in API calls and design compared to the older versions. Additionally, higher versions of Solidity correspond to EVM virtual machines that incorporate more opcodes. 
+
+Therefore, we have extended the version compatibility of the original Oyente to support all Solidity versions up to the latest available version as of June 2023, which was 0.8.19.
 
 
 ## What have we done?
@@ -31,7 +33,13 @@ The dataset we utilized is sourced from [ConsenSys](https://consensys.net/dilige
 
 These smart contracts were tested under EVM version 1.7.3 and various versions of Solidity. The test results are as follows:
 
+The number of detected smart contract vulnerabilities is as follows:
 
+![Vulerability_Detection](./fig/Oyente_sup_higher.png)
+
+The EVM Code Coverage is as follows:
+
+![EVM_Code_Coverage](./fig/EVMCodeCoverage.png)
 
 ## Quick Start
 
