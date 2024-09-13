@@ -12,6 +12,7 @@
 contract_data
 dist/
 tmp/
+venv/
 
 current_test.pickle
 
