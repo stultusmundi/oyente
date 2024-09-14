@@ -23,6 +23,8 @@ from test_evm.global_test_params import (TIME_OUT, UNKNOWN_INSTRUCTION,
 from vulnerability import CallStack, TimeDependency, MoneyConcurrency, Reentrancy, AssertionFailure, ParityMultisigBug2, IntegerUnderflow, IntegerOverflow
 import global_params
 
+import pdb
+
 log = logging.getLogger(__name__)
 
 UNSIGNED_BOUND_NUMBER = 2**256 - 1
@@ -197,7 +199,7 @@ def change_format():
             line = line.replace(':', '')
             lineParts = line.split(' ')
             try: # removing initial zeroes
-                lineParts[0] = str(int(lineParts[0]))
+                lineParts[0] = str(int(lineParts[0], 16))       # fix new evm use hex num
 
             except:
                 lineParts[0] = lineParts[0]
@@ -415,7 +417,7 @@ def add_falls_to():
 
 def get_init_global_state(path_conditions_and_vars):
     global_state = {"balance" : {}, "pc": 0}
-    init_is = init_ia = deposited_value = sender_address = receiver_address = gas_price = origin = currentCoinbase = currentNumber = currentDifficulty = currentGasLimit = callData = None
+    init_is = init_ia = deposited_value = sender_address = receiver_address = gas_price = origin = currentCoinbase = currentNumber = currentDifficulty = currentGasLimit = callData = currentChainID = currentBaseFee = None
 
     if global_params.INPUT_STATE:
         with open('state.json') as f:
@@ -442,6 +444,10 @@ def get_init_global_state(path_conditions_and_vars):
                 currentDifficulty = int(state["env"]["currentDifficulty"], 16)
             if state["env"]["currentGasLimit"]:
                 currentGasLimit = int(state["env"]["currentGasLimit"], 16)
+            if state["env"]["currentChainID"]:
+                currentChainID = int(state["env"]["currentChainID"], 16)
+            if state["env"]["currentBaseFee"]:
+                currentBaseFee = int(state["env"]["currentBaseFee"], 16)
 
     # for some weird reason these 3 vars are stored in path_conditions insteaad of global_state
     else:
@@ -497,6 +503,16 @@ def get_init_global_state(path_conditions_and_vars):
         currentGasLimit = BitVec(new_var_name, 256)
         path_conditions_and_vars[new_var_name] = currentGasLimit
 
+    if not currentChainID:
+        new_var_name = "IH_Ch"
+        currentChainID = BitVec(new_var_name, 256)
+        path_conditions_and_vars[new_var_name] = currentChainID
+
+    if not currentBaseFee:
+        new_var_name = "IH_b"
+        currentBaseFee = BitVec(new_var_name, 256)
+        path_conditions_and_vars[new_var_name] = currentBaseFee
+
     new_var_name = "IH_s"
     currentTimestamp = BitVec(new_var_name, 256)
     path_conditions_and_vars[new_var_name] = currentTimestamp
@@ -515,6 +531,8 @@ def get_init_global_state(path_conditions_and_vars):
     global_state["currentNumber"] = currentNumber
     global_state["currentDifficulty"] = currentDifficulty
     global_state["currentGasLimit"] = currentGasLimit
+    global_state["currentChainID"] = currentChainID
+    global_state["currentBaseFee"] = currentBaseFee
 
     return global_state
 
@@ -1302,39 +1320,54 @@ def sym_exec_ins(params, block, instr, func_call, current_func_name):
         else:
             raise ValueError('STACK underflow')
     elif opcode == "SHL":
-        if len(stack) >= 2:
+        if len(stack) > 1:
             global_state["pc"] = global_state["pc"] + 1
-            first = stack.pop(0)
-            second = stack.pop(0)
+            first = stack.pop(0)    #shift
+            second = stack.pop(0)   #value
 
-            computed = second << first
+            if first < 256:
+                computed = ((second << first) % (2 ** 256))
+            else:
+                computed = 0
+            
             computed = simplify(computed) if is_expr(computed) else computed
             stack.insert(0, computed)
+
         else:
             raise ValueError('STACK underflow')
     elif opcode == "SHR":
-        if len(stack) >= 2:
+        if len(stack) > 1:
             global_state["pc"] = global_state["pc"] + 1
-            first = stack.pop(0)
-            second = stack.pop(0)
-            #256 bit logical shift right
-            if isAllReal(first, second):
-                computed = (second % (1 << 256)) >> first
+            first = stack.pop(0)    #shift
+            second = stack.pop(0)   #value
+
+            if first < 256:
+                computed = second >> first
             else:
-                computed = LShR(second, first)
+                computed = 0
+            
             computed = simplify(computed) if is_expr(computed) else computed
             stack.insert(0, computed)
+
         else:
             raise ValueError('STACK underflow')
-    elif opcode == "SAR":
-        if len(stack) >= 2:
-            global_state["pc"] = global_state["pc"] + 1
-            first = stack.pop(0)
-            second = stack.pop(0)
 
-            computed = second >> first
+    elif opcode == "SAR":
+        if len(stack) > 1:
+            global_state["pc"] = global_state["pc"] + 1
+            first = stack.pop(0)    #shift
+            second = stack.pop(0)   #value
+
+            if first < 256:
+                computed = second >> first
+            elif second >= 0:
+                computed = 0
+            else:
+                computed = UNSIGNED_BOUND_NUMBER
+            
             computed = simplify(computed) if is_expr(computed) else computed
             stack.insert(0, computed)
+
         else:
             raise ValueError('STACK underflow')
     #
@@ -1586,18 +1619,51 @@ def sym_exec_ins(params, block, instr, func_call, current_func_name):
         else:
             raise ValueError('STACK underflow')
     elif opcode == "EXTCODEHASH":
-        if len(stack) >= 1:
+        if len(stack) > 1:
             global_state["pc"] = global_state["pc"] + 1
-            stack.pop(0)
-            new_var_name = "IH_codehash"
+            address = stack.pop(0)
+            if isReal(address) and global_params.USE_GLOBAL_BLOCKCHAIN:
+                account = data_source.accounts(address)
+
+                if len(account) == 0:
+                    codehash = 0
+                else:
+                    sha_obj = SHA256.new()
+                    sha_obj.update(account)
+                    codehash = sha_obj.hexdigest()
+                stack.insert(0, codehash)
+            else:
+                #not handled yet
+                new_var_name = gen.gen_accounts_var(address)
+                if new_var_name in path_conditions_and_vars:
+                    new_var = path_conditions_and_vars[new_var_name]
+                else:
+                    new_var = BitVec(new_var_name, 256)
+                    path_conditions_and_vars[new_var_name] = new_var
+                stack.insert(0, new_var)
+        else:
+            raise ValueError('STACK underflow')
+    elif opcode == "SELFBALANCE":
+        global_state["pc"] = global_state["pc"] + 1
+        address = path_conditions_and_vars["Ia"]
+        if isReal(address) and global_params.USE_GLOBAL_BLOCKCHAIN:
+            new_var = data_source.getBalance(address)
+        else:
+            new_var_name = gen.gen_balance_var()
             if new_var_name in path_conditions_and_vars:
                 new_var = path_conditions_and_vars[new_var_name]
             else:
                 new_var = BitVec(new_var_name, 256)
                 path_conditions_and_vars[new_var_name] = new_var
-            stack.insert(0, new_var)
+        if isReal(address):
+            hashed_address = "concrete_address_" + str(address)
         else:
-            raise ValueError('STACK underflow')
+            hashed_address = str(address)
+        global_state["balance"][hashed_address] = new_var
+        stack.push(0, balance)
+    elif opcode == "BASEFEE":
+        global_state["pc"] = global_state["pc"] + 1
+        stack.insert(0, global_state["currentBaseFee"])
     #
     #  40s: Block Information
     #
@@ -2108,6 +2174,18 @@ def sym_exec_ins(params, block, instr, func_call, current_func_name):
         # TODO
         return
 
+    elif opcode == "CREATE2":
+        if len(stack) > 3:
+            global_state["pc"] = global_state["pc"] + 1
+            stack.pop(0)
+            stack.pop(0)
+            stack.pop(0)
+            stack.pop(0)
+            new_var_name = gen.gen_arbitrary_var()
+            new_var = BitVec(new_var_name, 256)
+            stack.insert(0, new_var)
+        else:
+            raise ValueError('STACK underflow')
     else:
         log.debug("UNKNOWN INSTRUCTION: " + opcode)
         if global_params.UNIT_TEST == 2 or global_params.UNIT_TEST == 3:

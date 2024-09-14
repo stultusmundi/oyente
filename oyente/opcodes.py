@@ -24,7 +24,7 @@ opcodes = {
     "XOR": [0x18, 2, 1],
     "NOT": [0x19, 1, 1],
     "BYTE": [0x1a, 2, 1],
-    "SHL": [0x1b, 2, 1],
+    "SHL": [0x1b, 2, 1], 
     "SHR": [0x1c, 2, 1],
     "SAR": [0x1d, 2, 1],
     "SHA3": [0x20, 2, 1],
@@ -49,6 +49,9 @@ opcodes = {
     "NUMBER": [0x43, 0, 1],
     "DIFFICULTY": [0x44, 0, 1],
     "GASLIMIT": [0x45, 0, 1],
+    "CHAINID": [0x46, 0, 1],
+    "SELFBALANCE": [0x47, 0, 1],
+    "BASEFEE": [0x48, 0, 1],
     "POP": [0x50, 1, 0],
     "MLOAD": [0x51, 1, 1],
     "MSTORE": [0x52, 2, 0],
@@ -74,6 +77,7 @@ opcodes = {
     "CALL": [0xf1, 7, 1],
     "CALLCODE": [0xf2, 7, 1],
     "RETURN": [0xf3, 2, 0],
+    "CREATE2": [0xf5, 4, 0],
     "REVERT": [0xfd, 2, 0],
     "ASSERTFAIL": [0xfe, 0, 0],
     "DELEGATECALL": [0xf4, 6, 1],
@@ -129,7 +133,8 @@ GCOST = {
     "Gsha3": 30,
     "Gsha3word": 6,
     "Gcopy": 3,
-    "Gblockhash": 20
+    "Gblockhash": 20,
+    "Gextcodehash": 400
 }
 
 Wzero = ("STOP", "RETURN", "REVERT", "ASSERTFAIL")
@@ -139,8 +144,9 @@ Wbase = ("ADDRESS", "ORIGIN", "CALLER", "CALLVALUE", "CALLDATASIZE",
          "DIFFICULTY", "GASLIMIT", "POP", "PC", "MSIZE", "GAS")
 
 Wverylow = ("ADD", "SUB", "NOT", "LT", "GT", "SLT", "SGT", "EQ",
-            "ISZERO", "AND", "OR", "XOR", "BYTE", "SHL", "SHR", "SAR",
-            "CALLDATALOAD", "MLOAD", "MSTORE", "MSTORE8", "PUSH", "DUP", "SWAP")
+            "ISZERO", "AND", "OR", "XOR", "BYTE", "CALLDATALOAD",
+            "SHL", "SHR", "SAR",
+            "MLOAD", "MSTORE", "MSTORE8", "PUSH", "DUP", "SWAP")
 
 Wlow = ("MUL", "DIV", "SDIV", "MOD", "SMOD", "SIGNEXTEND")
 
@@ -210,4 +216,6 @@ def get_ins_cost(opcode):
         return GCOST["Gbalance"]
     elif opcode == "BLOCKHASH":
         return GCOST["Gblockhash"]
+    elif opcode == "EXTCODEHASH":
+        return GCOST["Gextcodehash"]
     return 0
