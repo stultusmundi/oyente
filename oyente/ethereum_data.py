@@ -48,3 +48,13 @@ class EthereumData:
                     log.exception("Error at: contract address: %s, position: %s" % (self.contract_addr, position))
                 raise
             return int(result, 16)
+
+        def accounts(self, address):
+            try:
+                apiEndPoint = "%s?module=proxy&action=eth_accounts&address=%s&tag=latest&apikey=%s" % (self.apiDomain, address, self.apikey)
+                r = requests.get(apiEndPoint)
+                result = r.json()["result"]
+            except Exception as e:
+                log.exception("Error at: contract address: %s" % address)
+                raise e
+            return result

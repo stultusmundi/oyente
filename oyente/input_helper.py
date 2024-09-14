@@ -9,7 +9,7 @@ import six
 from source_map import SourceMap
 from utils import run_command, run_command_with_err
 from crytic_compile import CryticCompile, InvalidCompilation
-
+import pdb
 class InputHelper:
     BYTECODE = 0
     SOLIDITY = 1
@@ -69,15 +69,32 @@ class InputHelper:
         else:
             contracts = self._get_compiled_contracts()
             self._prepare_disasm_files_for_analysis(contracts)
+            # Check Solidity version >= 0.8.0
+            tested_solc_version = '0.8.0'
+            def compare_versions(version1, version2):
+                def normalize(v):
+                    return [int(x) for x in re.sub(r'(\.0+)*$','', v).split(".")]
+                version1 = normalize(version1)
+                version2 = normalize(version2)
+                if six.PY2:
+                    return cmp(version1, version2)
+                else:
+                    return (version1 > version2) - (version1 < version2)
+            
+            cmd = "solc --version"
+            out = run_command(cmd).strip()
+            solc_version = re.findall(r"Version: (\d*.\d*.\d*)", out)[0]
+            high_ver = (compare_versions(solc_version, tested_solc_version) >= 0)
+
             for contract, _ in contracts:
                 c_source, cname = contract.split(':')
                 if targetContracts is not None and cname not in targetContracts:
                     continue
                 c_source = re.sub(self.root_path, "", c_source)
                 if self.input_type == InputHelper.SOLIDITY:
-                    source_map = SourceMap(contract, self.source, 'solidity', self.root_path, self.remap, self.allow_paths)
+                    source_map = SourceMap(contract, self.source, 'solidity', self.root_path, self.remap, self.allow_paths, high_ver)
                 else:
-                    source_map = SourceMap(contract, self.source, 'standard json', self.root_path)
+                    source_map = SourceMap(contract, self.source, 'standard json', self.root_path, high_ver)
                 disasm_file = self._get_temporary_files(contract)['disasm']
                 inputs.append({
                     'contract': contract,
@@ -109,18 +126,19 @@ class InputHelper:
         return self.compiled_contracts
 
     def _extract_bin_obj(self, com: CryticCompile):
-        return [(com.contracts_filenames[name].absolute + ':' + name, com.bytecode_runtime(name)) for name in com.contracts_names if com.bytecode_runtime(name)]
+        # return [(com.contracts_filenames[name].absolute + ':' + name, com.bytecode_runtime(name)) for name in com.contracts_names if com.bytecode_runtime(name)]
+        return [(list(com.compilation_units[self.source].filenames)[0].absolute + ':' + name, com.compilation_units[self.source].bytecode_runtime(name)) for name in com.compilation_units[self.source].contracts_names if com.compilation_units[self.source].bytecode_runtime(name)]
 
     def _compile_solidity(self):
         try:
             options = []
             if self.allow_paths:
                 options.append(F"--allow-paths {self.allow_paths}")
-                
             com = CryticCompile(self.source, solc_remaps=self.remap, solc_args=' '.join(options))
             contracts = self._extract_bin_obj(com)
 
-            libs = com.contracts_names.difference(com.contracts_names_without_libraries)
+            libs = com.compilation_units[self.source].contracts_names.difference(com.compilation_units[self.source].contracts_names_without_libraries)
+            # libs = com.contracts_names.difference(com.contracts_names_without_libraries)
             if libs:
                 return self._link_libraries(self.source, libs)
             
@@ -166,6 +184,13 @@ class InputHelper:
 
     def _removeSwarmHash(self, evm):
         evm_without_hash = re.sub(r"a165627a7a72305820\S{64}0029$", "", evm)
+
+        evm_without_hash = re.sub(r"a265627a7a72305820\S{82}0032$", "", evm_without_hash)       # Constantinople
+        evm_without_hash = re.sub(r"a265627a7a72315820\S{82}0032$", "", evm_without_hash)
+
+        evm_without_hash = re.sub(r"a365627a7a72315820\S{110}0040$", "", evm_without_hash)      # Istanbul
+
+        evm_without_hash = re.sub(r"a26469706673582212\S{84}0033$", "", evm_without_hash)
         return evm_without_hash
 
     def _link_libraries(self, filename, libs):
